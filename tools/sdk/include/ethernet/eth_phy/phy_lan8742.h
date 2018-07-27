@@ -20,6 +20,13 @@ extern "C" {
 
 #include "phy.h"
 
+/** @brief For debugging, return the values of all registers.
+ */
+void phy_lan8742_read_registers(uint16_t values[32]);
+
+/** @brief For debugging, return the value of a chosen MMD register.
+ */
+uint16_t phy_lan8742_read_mmd_register(uint16_t devad, uint16_t index);
 
 /** @brief Dump all LAN8742 PHY SMI configuration registers
  *
@@ -52,6 +59,14 @@ void phy_lan8742_power_enable(bool);
 /** @brief Default LAN8742 phy_init function.
  */
 void phy_lan8742_init(void);
+
+/** @brief LAN8742 Wake-On-LAN magic packet enable function.
+ */
+void phy_lan8742_wol_magic_begin(void);
+
+/** @brief LAN8742 Wake-On-LAN magic packet disable function.
+ */
+void phy_lan8742_wol_magic_end(void);
 
 /** @brief Default LAN8742 PHY configuration
  *

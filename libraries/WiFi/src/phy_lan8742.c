@@ -22,7 +22,7 @@
  * (Except for bottom 4 bits of ID2, used for model revision)
  */
 #define LAN8742_PHY_ID1 0x0007
-#define LAN8742_PHY_ID2 0xc131
+#define LAN8742_PHY_ID2 0xc130
 #define LAN8742_PHY_ID2_MASK 0xFFF0
 
 /* LAN8742-specific registers */
@@ -47,7 +47,45 @@
 #define SPEED_INDICATION_10T               BIT(2)
 #define DUPLEX_INDICATION_FULL             BIT(4)
 
+#define MMD_ACCESS_CTL_REG                 (13)
+#define MMD_FUNCTION_ADDR                  0x00
+#define MMD_FUNCTION_DATA                  BIT(14)
+#define MMD_DEVAD_PCS                      3
+
+#define MMD_ACCESS_ADDR_DATA_REG           (14)
+#define PCS_MAC_RX_ADDRA_REG               (32865)
+#define PCS_MAC_RX_ADDRB_REG               (32866)
+#define PCS_MAC_RX_ADDRC_REG               (32867)
+
+#define PCS_WUCSR                          (32784)
+#define WOL_CONFIGURED                     BIT(8)
+#define MPEN                               BIT(1)
+#define MPR                                BIT(5)
+
+#define ISFR                               (29)
+#define ISFR_WOL_EVENT                     BIT(8)
+
+#define IMR                                (30)
+
 static const char *TAG = "lan8742";
+
+// The device MMD registers adhere to the IEEE 802.3-2008 45.2 MDIO Interface
+// Registers specification.
+void esp_eth_mmd_write(uint16_t devad, uint16_t index, uint16_t value)
+{
+    esp_eth_smi_write(MMD_ACCESS_CTL_REG, MMD_FUNCTION_ADDR|devad);
+    esp_eth_smi_write(MMD_ACCESS_ADDR_DATA_REG, index);
+    esp_eth_smi_write(MMD_ACCESS_CTL_REG, MMD_FUNCTION_DATA|devad);
+    esp_eth_smi_write(MMD_ACCESS_ADDR_DATA_REG, value);
+}
+
+uint16_t phy_lan8742_read_mmd_register(uint16_t devad, uint16_t index)
+{
+    esp_eth_smi_write(MMD_ACCESS_CTL_REG, MMD_FUNCTION_ADDR|devad);
+    esp_eth_smi_write(MMD_ACCESS_ADDR_DATA_REG, index);
+    esp_eth_smi_write(MMD_ACCESS_CTL_REG, MMD_FUNCTION_DATA|devad);
+    return esp_eth_smi_read(MMD_ACCESS_ADDR_DATA_REG);
+}
 
 void phy_lan8742_check_phy_init(void)
 {
@@ -112,6 +150,35 @@ void phy_lan8742_init(void)
     phy_mii_enable_flow_ctrl();
 }
 
+// Wake-On-LAN magic packet enable function.
+void phy_lan8742_wol_magic_begin(void)
+{
+    uint8_t mac[6];
+    esp_eth_get_mac(mac);
+    // Tell the PHY which MAC pattern to watch for.
+    esp_eth_mmd_write(MMD_DEVAD_PCS, PCS_MAC_RX_ADDRA_REG, (mac[5]<<8)|mac[4]);
+    esp_eth_mmd_write(MMD_DEVAD_PCS, PCS_MAC_RX_ADDRB_REG, (mac[3]<<8)|mac[2]);
+    esp_eth_mmd_write(MMD_DEVAD_PCS, PCS_MAC_RX_ADDRC_REG, (mac[1]<<8)|mac[0]);
+    // Configure WoL.
+    esp_eth_mmd_write(MMD_DEVAD_PCS, PCS_WUCSR, WOL_CONFIGURED|MPEN);
+    // Enable the interrupt.
+    esp_eth_smi_write(IMR, ISFR_WOL_EVENT);
+}
+
+// Wake-On-LAN magic packet disable function.
+void phy_lan8742_wol_magic_end(void)
+{
+    // Deconfigure WoL.
+    esp_eth_mmd_write(MMD_DEVAD_PCS, PCS_WUCSR, 0x00);
+    // Read ISFR register 29 to clear any asserted WoL event on nINT.
+    esp_eth_smi_write(IMR, ISFR_WOL_EVENT);
+    esp_eth_smi_read(ISFR); // Bit#8 would be set for WoL event.
+    // Mask interrupts.
+    esp_eth_smi_write(IMR, 0);
+    // Clear the magic packet received flag.
+    esp_eth_mmd_write(MMD_DEVAD_PCS, PCS_WUCSR, MPR);
+}
+
 const eth_config_t phy_lan8742_default_ethernet_config = {
     // By default, the PHY address is 0 or 1 based on PHYAD0
     // pin. Can also be overriden in software. See datasheet
@@ -130,21 +197,35 @@ const eth_config_t phy_lan8742_default_ethernet_config = {
     .phy_get_partner_pause_enable = phy_mii_get_partner_pause_enable,
 };
 
+// For debugging, return the values of all registers.
+void phy_lan8742_read_registers(uint16_t values[32])
+{
+    int8_t i;
+    for (i = 0; i <= 31; i++)
+        values[i] = esp_eth_smi_read(i);
+}
+
 void phy_lan8742_dump_registers()
 {
     ESP_LOGD(TAG, "LAN8742 Registers:");
-    ESP_LOGD(TAG, "BCR    0x%04x", esp_eth_smi_read(0x0));
-    ESP_LOGD(TAG, "BSR    0x%04x", esp_eth_smi_read(0x1));
-    ESP_LOGD(TAG, "PHY1   0x%04x", esp_eth_smi_read(0x2));
-    ESP_LOGD(TAG, "PHY2   0x%04x", esp_eth_smi_read(0x3));
-    ESP_LOGD(TAG, "ANAR   0x%04x", esp_eth_smi_read(0x4));
-    ESP_LOGD(TAG, "ANLPAR 0x%04x", esp_eth_smi_read(0x5));
-    ESP_LOGD(TAG, "ANER   0x%04x", esp_eth_smi_read(0x6));
-    ESP_LOGD(TAG, "MCSR   0x%04x", esp_eth_smi_read(0x17));
-    ESP_LOGD(TAG, "SM     0x%04x", esp_eth_smi_read(0x18));
-    ESP_LOGD(TAG, "SECR   0x%04x", esp_eth_smi_read(0x26));
-    ESP_LOGD(TAG, "CSIR   0x%04x", esp_eth_smi_read(0x27));
-    ESP_LOGD(TAG, "ISR    0x%04x", esp_eth_smi_read(0x29));
-    ESP_LOGD(TAG, "IMR    0x%04x", esp_eth_smi_read(0x30));
-    ESP_LOGD(TAG, "PSCSR  0x%04x", esp_eth_smi_read(0x31));
+    ESP_LOGD(TAG, "BCR    0x%04x", esp_eth_smi_read(0));
+    ESP_LOGD(TAG, "BSR    0x%04x", esp_eth_smi_read(1));
+    ESP_LOGD(TAG, "PHY1   0x%04x", esp_eth_smi_read(2));
+    ESP_LOGD(TAG, "PHY2   0x%04x", esp_eth_smi_read(3));
+    ESP_LOGD(TAG, "ANAR   0x%04x", esp_eth_smi_read(4));
+    ESP_LOGD(TAG, "ANLPAR 0x%04x", esp_eth_smi_read(5));
+    ESP_LOGD(TAG, "ANER   0x%04x", esp_eth_smi_read(6));
+    ESP_LOGD(TAG, "EDPD   0x%04x", esp_eth_smi_read(16));
+    ESP_LOGD(TAG, "MCSR   0x%04x", esp_eth_smi_read(17));
+    ESP_LOGD(TAG, "SMR    0x%04x", esp_eth_smi_read(18));
+    ESP_LOGD(TAG, "SECR   0x%04x", esp_eth_smi_read(26));
+    ESP_LOGD(TAG, "CSIR   0x%04x", esp_eth_smi_read(27));
+    ESP_LOGD(TAG, "CLR    0x%04x", esp_eth_smi_read(28));
+    ESP_LOGD(TAG, "ISR    0x%04x", esp_eth_smi_read(29));
+    ESP_LOGD(TAG, "IMR    0x%04x", esp_eth_smi_read(30));
+    ESP_LOGD(TAG, "PSCSR  0x%04x", esp_eth_smi_read(31));
+    ESP_LOGD(TAG, "WUCSR  0x%04x", phy_lan8742_read_mmd_register(3, 32784));
+    ESP_LOGD(TAG, "ADDRA  0x%04x", phy_lan8742_read_mmd_register(3, 32865));
+    ESP_LOGD(TAG, "ADDRB  0x%04x", phy_lan8742_read_mmd_register(3, 32866));
+    ESP_LOGD(TAG, "ADDRC  0x%04x", phy_lan8742_read_mmd_register(3, 32867));
 }
