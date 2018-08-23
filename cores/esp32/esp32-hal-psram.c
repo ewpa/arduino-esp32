@@ -1,5 +1,6 @@
 
 #include "esp32-hal.h"
+#include "sdkconfig.h"
 
 #if CONFIG_SPIRAM_SUPPORT
 #include "esp_spiram.h"
