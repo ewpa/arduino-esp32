@@ -1,7 +1,5 @@
-#ifndef Pins_Arduino_h
-#define Pins_Arduino_h
-
-#include <stdint.h>
+#ifndef _D32_CORE_H_
+#define _D32_CORE_H_
 
 #define EXTERNAL_NUM_INTERRUPTS 16
 #define NUM_DIGITAL_PINS        40
@@ -11,31 +9,23 @@
 #define digitalPinToInterrupt(p)    (((p)<40)?(p):-1)
 #define digitalPinHasPWM(p)         (p < 34)
 
-static const uint8_t LED_BUILTIN = 25;
-#define BUILTIN_LED  LED_BUILTIN // backward compatibility
-
-static const uint8_t KEY_BUILTIN = 0;
-
 static const uint8_t TX = 1;
 static const uint8_t RX = 3;
 
-static const uint8_t SDA = 4;
-static const uint8_t SCL = 15;
+static const uint8_t SDA = 21;
+static const uint8_t SCL = 22;
 
-static const uint8_t SS    = 18;
-static const uint8_t MOSI  = 27;
+static const uint8_t SS    = 5;
+static const uint8_t MOSI  = 23;
 static const uint8_t MISO  = 19;
-static const uint8_t SCK   = 5;
+static const uint8_t SCK   = 18;
 
 static const uint8_t A0 = 36;
-static const uint8_t A1 = 37;
-static const uint8_t A2 = 38;
 static const uint8_t A3 = 39;
 static const uint8_t A4 = 32;
 static const uint8_t A5 = 33;
 static const uint8_t A6 = 34;
 static const uint8_t A7 = 35;
-
 static const uint8_t A10 = 4;
 static const uint8_t A11 = 0;
 static const uint8_t A12 = 2;
@@ -55,23 +45,10 @@ static const uint8_t T4 = 13;
 static const uint8_t T5 = 12;
 static const uint8_t T6 = 14;
 static const uint8_t T7 = 27;
-static const uint8_t T8 = 32;
-static const uint8_t T9 = 33;
+static const uint8_t T8 = 33;
+static const uint8_t T9 = 32;
 
-static const uint8_t DAC1 = 26;
-static const uint8_t DAC2 = 25;
+static const uint8_t DAC1 = 25;
+static const uint8_t DAC2 = 26;
 
-// OLed
-static const uint8_t OLED_SCL = 15;
-static const uint8_t OLED_SDA = 4;
-static const uint8_t OLED_RST = 16;
-
-// LoRA
-static const uint8_t LORA_SCK = 5;
-static const uint8_t LORA_MOSI = 27;
-static const uint8_t LORA_MISO = 19;
-static const uint8_t LORA_CS = 18;
-static const uint8_t LORA_RST = 14;
-static const uint8_t LORA_IRQ = 26;
-
-#endif /* Pins_Arduino_h */
+#endif
