@@ -35,9 +35,9 @@
 /* controller */
 #define ESP_TASK_BT_CONTROLLER_PRIO   (ESP_TASK_PRIO_MAX - 2)
 #ifdef CONFIG_NEWLIB_NANO_FORMAT
-#define TASK_EXTRA_STACK_SIZE      (0)
-#else
 #define TASK_EXTRA_STACK_SIZE      (512)
+#else
+#define TASK_EXTRA_STACK_SIZE      (1024)
 #endif
 
 #define BT_TASK_EXTRA_STACK_SIZE      TASK_EXTRA_STACK_SIZE
