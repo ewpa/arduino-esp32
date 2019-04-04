@@ -109,6 +109,8 @@ typedef struct {
     int                    tx_ba_win;              /**< WiFi Block Ack TX window size */
     int                    rx_ba_win;              /**< WiFi Block Ack RX window size */
     int                    wifi_task_core_id;      /**< WiFi Task Core ID */
+    int                    beacon_max_len;         /**< WiFi softAP maximum length of the beacon */
+    int                    mgmt_sbuf_num;          /**< WiFi management short buffer number, the minimum value is 6, the maximum value is 32 */
     int                    magic;                  /**< WiFi init magic number, it should be the last field */
 } wifi_init_config_t;
 
@@ -176,6 +178,18 @@ extern const wpa_crypto_funcs_t g_wifi_default_wpa_crypto_funcs;
 #define WIFI_TASK_CORE_ID 0
 #endif
 
+#ifdef CONFIG_ESP32_WIFI_SOFTAP_BEACON_MAX_LEN
+#define WIFI_SOFTAP_BEACON_MAX_LEN CONFIG_ESP32_WIFI_SOFTAP_BEACON_MAX_LEN
+#else
+#define WIFI_SOFTAP_BEACON_MAX_LEN 752
+#endif
+
+#ifdef CONFIG_ESP32_WIFI_MGMT_SBUF_NUM
+#define WIFI_MGMT_SBUF_NUM CONFIG_ESP32_WIFI_MGMT_SBUF_NUM
+#else
+#define WIFI_MGMT_SBUF_NUM 32
+#endif
+
 #define WIFI_INIT_CONFIG_DEFAULT() { \
     .event_handler = &esp_event_send, \
     .osi_funcs = &g_wifi_osi_funcs, \
@@ -193,6 +207,8 @@ extern const wpa_crypto_funcs_t g_wifi_default_wpa_crypto_funcs;
     .tx_ba_win = WIFI_DEFAULT_TX_BA_WIN,\
     .rx_ba_win = WIFI_DEFAULT_RX_BA_WIN,\
     .wifi_task_core_id = WIFI_TASK_CORE_ID,\
+    .beacon_max_len = WIFI_SOFTAP_BEACON_MAX_LEN, \
+    .mgmt_sbuf_num = WIFI_MGMT_SBUF_NUM, \
     .magic = WIFI_INIT_CONFIG_MAGIC\
 };
 
