@@ -22,6 +22,7 @@
 #include "eth_phy/phy.h"
 #include "eth_phy/phy_tlk110.h"
 #include "eth_phy/phy_lan8720.h"
+#include "eth_phy/phy_lan8742.h"
 #include "lwip/err.h"
 #include "lwip/dns.h"
 
@@ -77,6 +78,9 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
         memcpy(&eth_config, &config, sizeof(eth_config_t));
     } else if(type == ETH_PHY_TLK110){
         eth_config_t config = phy_tlk110_default_ethernet_config;
+        memcpy(&eth_config, &config, sizeof(eth_config_t));
+    } else if(type == ETH_PHY_LAN8742){
+        eth_config_t config = phy_lan8742_default_ethernet_config;
         memcpy(&eth_config, &config, sizeof(eth_config_t));
     } else {
         log_e("Bad ETH_PHY type: %u", (uint8_t)type);
