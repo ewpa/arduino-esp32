@@ -68,16 +68,56 @@ void WiFiServer::begin(uint16_t port){
   if(port){
       _port = port;
   }
-  struct sockaddr_in server;
-  sockfd = socket(AF_INET , SOCK_STREAM, 0);
-  if (sockfd < 0)
+  int n, ret;
+  struct addrinfo hints, *addr_list, *cur;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_UNSPEC;
+  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_protocol = IPPROTO_TCP;
+  if (getaddrinfo("::", inet_ntoa(_port), &hints, &addr_list) != 0)
     return;
-  server.sin_family = AF_INET;
-  server.sin_addr.s_addr = INADDR_ANY;
-  server.sin_port = htons(_port);
-  if(bind(sockfd, (struct sockaddr *)&server, sizeof(server)) < 0)
-    return;
-  if(listen(sockfd , _max_clients) < 0)
+  /* Try the sockaddrs until a binding succeeds */
+  ret = 1; // unknown host
+  for (cur = addr_list; cur != NULL; cur = cur->ai_next)
+  {
+    sockfd = (int) socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
+    if (sockfd < 0)
+    {
+      //ret = 2; // socket failed
+      continue;
+    }
+
+    n = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, (const char *) &n,
+                   sizeof(n)) != 0)
+    {
+      lwip_close_r(sockfd);
+      //ret = 3; // setsockopt failed
+      continue;
+    }
+
+    if (bind(sockfd, cur->ai_addr, cur->ai_addrlen) != 0)
+    {
+      lwip_close_r(sockfd);
+      //ret = 4; // bind failed
+      continue;
+    }
+
+    if (listen(sockfd, _max_clients) != 0)
+    {
+      lwip_close_r(sockfd);
+      //ret = 5; // listen failed
+      continue;
+    }
+
+    /* Bind was successful */
+    ret = 0;
+    break;
+  }
+
+  freeaddrinfo(addr_list);
+
+  if (ret != 0)
     return;
   fcntl(sockfd, F_SETFL, O_NONBLOCK);
   _listening = true;
