@@ -36,6 +36,7 @@
     #include "eth_phy/phy.h"
     #include "eth_phy/phy_tlk110.h"
     #include "eth_phy/phy_lan8720.h"
+    #include "eth_phy/phy_lan8742.h"
 #endif
 #include "lwip/err.h"
 #include "lwip/dns.h"
@@ -277,6 +278,9 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
         case ETH_PHY_LAN8720:
             eth_phy = esp_eth_phy_new_lan8720(&phy_config);
             break;
+        case ETH_PHY_LAN8742:
+            eth_phy = esp_eth_phy_new_lan8742(&phy_config);
+            break;
         case ETH_PHY_TLK110:
             eth_phy = esp_eth_phy_new_ip101(&phy_config);
             break;
@@ -352,6 +356,9 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
 
     if(type == ETH_PHY_LAN8720){
         eth_config_t config = phy_lan8720_default_ethernet_config;
+        memcpy(&eth_config, &config, sizeof(eth_config_t));
+    } else if(type == ETH_PHY_LAN8742){
+        eth_config_t config = phy_lan8742_default_ethernet_config;
         memcpy(&eth_config, &config, sizeof(eth_config_t));
     } else if(type == ETH_PHY_TLK110){
         eth_config_t config = phy_tlk110_default_ethernet_config;
