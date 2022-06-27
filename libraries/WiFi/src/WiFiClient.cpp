@@ -283,11 +283,88 @@ int WiFiClient::connect(const char *host, uint16_t port)
    }
    int WiFiClient::connect(const char *host, uint16_t port, int32_t timeout   )
 {
-    IPAddress srv((uint32_t)0);
-    if(!WiFiGenericClass::hostByName(host, srv)){
+    struct addrinfo hints, *addr_list, *cur;
+    /* Do name resolution with both IPv6 and IPv4 */
+    memset( &hints, 0, sizeof( hints ) );
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    char aport[6]; itoa(port, aport, 10);
+
+    if( getaddrinfo( host, aport, &hints, &addr_list ) != 0 )
         return 0;
+
+    /* Try the sockaddrs until a connection succeeds */
+    int sockfd;
+    int res = 0;
+    for( cur = addr_list; cur != NULL; cur = cur->ai_next )
+    {
+        sockfd = (int) socket( cur->ai_family, cur->ai_socktype,
+                            cur->ai_protocol );
+        if( sockfd < 0 )
+        {
+            res = 0;
+            continue;
+        }
+
+        fcntl( sockfd, F_SETFL, fcntl( sockfd, F_GETFL, 0 ) | O_NONBLOCK );
+#ifdef ESP_IDF_VERSION_MAJOR
+        res = lwip_connect(sockfd, cur->ai_addr, (int) cur->ai_addrlen);
+#else
+        res = lwip_connect_r(sockfd, cur->ai_addr, (int) cur->ai_addrlen);
+#endif
+        if (res >= 0 || errno == EINPROGRESS) {
+            res = 1;
+            break;
+        }
+
+        close( sockfd );
+        res = 0;
     }
-    return connect(srv, port, timeout);
+
+    freeaddrinfo( addr_list );
+
+    if (!res) return 0;
+
+    fd_set fdset;
+    struct timeval tv;
+    FD_ZERO(&fdset);
+    FD_SET(sockfd, &fdset);
+    tv.tv_sec = 0;
+    tv.tv_usec = timeout * 1000;
+
+    res = select(sockfd + 1, nullptr, &fdset, nullptr, timeout<0 ? nullptr : &tv);
+    if (res < 0) {
+        log_e("select on fd %d, errno: %d, \"%s\"", sockfd, errno, strerror(errno));
+        close(sockfd);
+        return 0;
+    } else if (res == 0) {
+        log_i("select returned due to timeout %d ms for fd %d", timeout, sockfd);
+        close(sockfd);
+        return 0;
+    } else {
+        int sockerr;
+        socklen_t len = (socklen_t)sizeof(int);
+        res = getsockopt(sockfd, SOL_SOCKET, SO_ERROR, &sockerr, &len);
+
+        if (res < 0) {
+            log_e("getsockopt on fd %d, errno: %d, \"%s\"", sockfd, errno, strerror(errno));
+            close(sockfd);
+            return 0;
+        }
+
+        if (sockerr != 0) {
+            log_e("socket error on fd %d, errno: %d, \"%s\"", sockfd, sockerr, strerror(sockerr));
+            close(sockfd);
+            return 0;
+        }
+    }
+
+    fcntl( sockfd, F_SETFL, fcntl( sockfd, F_GETFL, 0 ) & (~O_NONBLOCK) );
+    clientSocketHandle.reset(new WiFiClientSocketHandle(sockfd));
+    _rxBuffer.reset(new WiFiClientRxBuffer(sockfd));
+    _connected = true;
+    return 1;
 }
 
 int WiFiClient::setSocketOption(int option, char* value, size_t len)
