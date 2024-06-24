@@ -29,6 +29,9 @@
     #include "esp_eth_phy.h"
     #include "esp_eth_mac.h"
     #include "esp_eth_com.h"
+#if CONFIG_ETH_USE_SPI_ETHERNET
+    #include "driver/spi_master.h"
+#endif
 #if CONFIG_IDF_TARGET_ESP32
     #include "soc/emac_ext_struct.h"
     #include "soc/rtc.h"
@@ -39,6 +42,7 @@
     #include "eth_phy/phy.h"
     #include "eth_phy/phy_tlk110.h"
     #include "eth_phy/phy_lan8720.h"
+    #include "eth_phy/phy_lan8742.h"
 #endif
 #include "lwip/err.h"
 #include "lwip/dns.h"
@@ -254,6 +258,31 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
         return false;//todo
     } else {
 #endif
+#if CONFIG_ETH_SPI_ETHERNET_KSZ8851SNL
+        if(type == ETH_PHY_KSZ8851SNL){
+        eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();      // apply default common MAC configuration
+        spi_bus_config_t buscfg = {
+            .mosi_io_num = MOSI,
+            .miso_io_num = MISO,
+            .sclk_io_num = SCK,
+            .quadwp_io_num = -1,
+            .quadhd_io_num = -1,
+        };
+        ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
+        // Configure SPI device
+        spi_device_interface_config_t spi_devcfg = {
+            .mode = 0,
+            .clock_speed_hz = ETH_SPI_SPEED_MHZ * 1000 * 1000,
+            .spics_io_num = SS,
+            .queue_size = 20
+        };
+        spi_device_handle_t spi_handle;
+        ESP_ERROR_CHECK(spi_bus_add_device(SPI2_HOST, &spi_devcfg, &spi_handle));
+        eth_ksz8851snl_config_t ksz8851snl_config = ETH_KSZ8851SNL_DEFAULT_CONFIG(spi_handle);
+        ksz8851snl_config.int_gpio_num = mdio;
+        eth_mac = esp_eth_mac_new_ksz8851snl(&ksz8851snl_config, &mac_config);
+    } else {
+#endif
 #if CONFIG_ETH_USE_ESP32_EMAC
         eth_mac_config_t mac_config = ETH_MAC_DEFAULT_CONFIG();
         mac_config.clock_config.rmii.clock_mode = (eth_clock_mode) ? EMAC_CLK_OUT : EMAC_CLK_EXT_IN;
@@ -262,6 +291,9 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
         mac_config.smi_mdio_gpio_num = mdio;
         mac_config.sw_reset_timeout_ms = 1000;
         eth_mac = esp_eth_mac_new_esp32(&mac_config);
+#endif
+#if CONFIG_ETH_SPI_ETHERNET_KSZ8851SNL
+    }
 #endif
 #if CONFIG_ETH_SPI_ETHERNET_DM9051
     }
@@ -280,6 +312,9 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
         case ETH_PHY_LAN8720:
             eth_phy = esp_eth_phy_new_lan8720(&phy_config);
             break;
+        case ETH_PHY_LAN8742:
+            eth_phy = esp_eth_phy_new_lan8742(&phy_config);
+            break;
         case ETH_PHY_TLK110:
             eth_phy = esp_eth_phy_new_ip101(&phy_config);
             break;
@@ -292,6 +327,12 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
 #if CONFIG_ETH_SPI_ETHERNET_DM9051
         case ETH_PHY_DM9051:
             eth_phy = esp_eth_phy_new_dm9051(&phy_config);
+            break;
+#endif
+#if CONFIG_ETH_SPI_ETHERNET_KSZ8851SNL
+        case ETH_PHY_KSZ8851SNL:
+            gpio_install_isr_service(0);
+            eth_phy = esp_eth_phy_new_ksz8851snl(&phy_config);
             break;
 #endif
         case ETH_PHY_KSZ8041:
@@ -324,7 +365,17 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
         log_e("esp_eth_driver_install failed");
         return false;
     }
-    
+
+#if CONFIG_ETH_SPI_ETHERNET_KSZ8851SNL
+    if (type == ETH_PHY_KSZ8851SNL && !use_mac_from_efuse)
+    {
+        uint8_t mac[] = { 0x02, 0x00, 0x00, 0x00, 0x00, 0x00 };
+        esp_efuse_mac_get_default(mac);
+        mac[5] += 3;
+        ESP_ERROR_CHECK(esp_eth_ioctl(eth_handle, ETH_CMD_S_MAC_ADDR, mac));
+    }
+#endif
+
     /* attach Ethernet driver to TCP/IP stack */
     if(esp_netif_attach(eth_netif, esp_eth_new_netif_glue(eth_handle)) != ESP_OK){
         log_e("esp_netif_attach failed");
@@ -355,6 +406,9 @@ bool ETHClass::begin(uint8_t phy_addr, int power, int mdc, int mdio, eth_phy_typ
 
     if(type == ETH_PHY_LAN8720){
         eth_config_t config = phy_lan8720_default_ethernet_config;
+        memcpy(&eth_config, &config, sizeof(eth_config_t));
+    } else if(type == ETH_PHY_LAN8742){
+        eth_config_t config = phy_lan8742_default_ethernet_config;
         memcpy(&eth_config, &config, sizeof(eth_config_t));
     } else if(type == ETH_PHY_TLK110){
         eth_config_t config = phy_tlk110_default_ethernet_config;
